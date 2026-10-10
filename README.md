@@ -89,6 +89,28 @@ python -m aimv.predict --ckpt runs/documents/best.pt --input receipt.jpg --heatm
 0.041  likely real                  exam.jpg      [camera EXIF present (samsung SM-A546E) — weak evidence of a real capture]
 ```
 
+## واجهة الفحص الفوري (ارفع صورة ← نتيجة خلال ثوانٍ)
+
+```bash
+python -m aimv.server --photo-ckpt runs/photos_clip/best.pt runs/photos_artifact/best.pt \
+    --doc-ckpt runs/documents/best.pt --port 8000
+# افتح http://localhost:8000
+```
+
+- اسحب الصورة أو الصقها (Ctrl+V)، وتظهر النتيجة مباشرة.
+- يحدد النوع تلقائياً (فاتورة/مستند أو صورة أشخاص)، ويمكنك اختياره يدوياً.
+- **التفصيل** يتضمن:
+  - النتيجة ونسبة التزييف ومستوى الثقة.
+  - نوع التزييف: توليد كامل أم تعديل موضعي (مثل تغيير المبلغ).
+  - المناطق المشبوهة مؤطّرة بالأحمر مع موقعها (أعلى اليمين، أسفل الوسط، ...).
+  - اتفاق النماذج، والبيانات الوصفية.
+- **السرعة:** النماذج تُحمّل مرة واحدة عند التشغيل. على معالج عادي بأربع أنوية يستغرق المستند حوالي 1.5–2 ثانية، وعلى GPU أقل من نصف ثانية. `--max-tiles` أقل يعني أسرع.
+- **واجهة برمجية (API) لربطها بتطبيق أو بوت واتساب/تيليجرام:**
+
+```bash
+curl -F file=@receipt.jpg -F kind=auto http://localhost:8000/api/analyze
+```
+
 ## الاختبارات
 
 ```bash
@@ -108,7 +130,10 @@ aimv/
   evaluate.py    تقرير مفصّل ومقاومة الضغط
   inference.py   التقييم بالمربعات، والخريطة الحرارية، والدمج
   forensics.py   فحص البيانات الوصفية والعلامات
-  predict.py     واجهة الفحص
+  predict.py     واجهة الفحص من سطر الأوامر
+  analyze.py     التحليل المفصّل: الشرح بالعربي، والمناطق المشبوهة، وتحديد نوع الصورة
+  server.py      خادم الويب وواجهة API
+  static/index.html  صفحة الرفع (عربية، تعمل على الجوال والوضع الليلي)
 scripts/
   build_manifest.py     بناء البيانات، وإزالة التكرار، والتقسيم دون تسرّب
   make_tamper_fakes.py  تعديلات موضعية تلقائية على المستندات الحقيقية

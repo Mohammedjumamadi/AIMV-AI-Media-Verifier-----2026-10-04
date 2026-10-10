@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>كاشف التزييف</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #5d6470; --line: #e3e6eb;
+    --fake: #c62828; --fake-bg: #fdecec; --real: #1f7a3a; --real-bg: #e8f5ec;
+    --warn: #9a6200; --warn-bg: #fff4dc; --accent: #2457d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111317; --card: #1b1e24; --text: #eceef2; --muted: #a0a7b3; --line: #2c3038;
+      --fake: #ff6b6b; --fake-bg: #3a1c1e; --real: #5fd38a; --real-bg: #16301f;
+      --warn: #f1b84a; --warn-bg: #362a12; --accent: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.7 system-ui, "Segoe UI", Tahoma, "Noto Naskh Arabic", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+  #drop { border: 2px dashed var(--line); border-radius: 14px; padding: 36px 16px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s; }
+  #drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  #drop strong { display: block; font-size: 1.15rem; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; justify-content: center; }
+  .seg button { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 6px 14px;
+    border-radius: 999px; cursor: pointer; font: inherit; }
+  .seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #status { text-align: center; color: var(--muted); min-height: 1.7em; }
+  .verdict { border-radius: 14px; padding: 18px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .verdict.fake { background: var(--fake-bg); color: var(--fake); }
+  .verdict.real { background: var(--real-bg); color: var(--real); }
+  .verdict.unsure { background: var(--warn-bg); color: var(--warn); }
+  .verdict .big { font-size: 1.6rem; font-weight: 700; }
+  .verdict .pct { font-size: 2.2rem; font-weight: 800; margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+  .bar { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 10px; position: relative; }
+  .bar > i { display: block; height: 100%; background: currentColor; }
+  .bar > b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .6; }
+  .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  img.result { width: 100%; border-radius: 10px; border: 1px solid var(--line); }
+  ul.explain { margin: 0; padding-inline-start: 20px; }
+  ul.explain li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  td, th { text-align: start; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>كاشف الصور والمستندات المزيّفة</h1>
+  <p class="sub">ارفع صورة أو فاتورة أو إيصالاً، وستظهر النتيجة خلال ثوانٍ مع تفصيل المناطق المعدّلة.</p>
+
+  <div class="card">
+    <div id="drop" tabindex="0" role="button" aria-label="اختر صورة">
+      <strong>اسحب الصورة هنا، أو اضغط للاختيار</strong>
+      <span class="meta">أو الصقها مباشرة (Ctrl+V) · JPG وPNG وWEBP</span>
+    </div>
+    <input id="file" type="file" accept="image/*" class="hidden">
+    <div class="row">
+      <span class="meta">نوع الصورة:</span>
+      <div class="seg" id="kind">
+        <button type="button" data-k="auto" aria-pressed="true">تلقائي</button>
+        <button type="button" data-k="document" aria-pressed="false">فاتورة / مستند</button>
+        <button type="button" data-k="photo" aria-pressed="false">صورة أشخاص</button>
+      </div>
+    </div>
+  </div>
+
+  <p id="status" aria-live="polite"></p>
+
+  <section id="result" class="hidden">
+    <div class="card verdict" id="verdict">
+      <div>
+        <div class="big" id="vText"></div>
+        <div class="meta"><span id="vKind"></span> · <bdi id="vName"></bdi> · <bdi id="vSize" dir="ltr"></bdi></div>
+      </div>
+      <div class="pct" id="vPct"></div>
+      <div class="bar" style="flex-basis:100%"><i id="vBar"></i><b id="vThr"></b></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>الصورة مع المناطق المشبوهة</h2>
+        <img class="result" id="annotated" alt="الصورة بعد التحليل">
+      </div>
+      <div>
+        <div class="card"><h2>التفصيل</h2><ul class="explain" id="explain"></ul></div>
+        <div class="card"><h2>النماذج</h2><table id="models"></table></div>
+        <div class="card"><h2>البيانات الوصفية</h2><table id="meta"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let kind = "auto", lastFile = null;
+
+  document.querySelectorAll("#kind button").forEach(b => b.onclick = () => {
+    kind = b.dataset.k;
+    document.querySelectorAll("#kind button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    if (lastFile) send(lastFile);
+  });
+  const drop = $("drop"), input = $("file");
+  drop.onclick = () => input.click();
+  drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") input.click(); };
+  input.onchange = () => input.files[0] && send(input.files[0]);
+  ["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => e.dataTransfer.files[0] && send(e.dataTransfer.files[0]));
+  document.addEventListener("paste", e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+    if (item) send(item.getAsFile());
+  });
+
+  const pct = p => (p * 100).toFixed(1) + "%";
+  function row(table, cells, head) {
+    const tr = document.createElement("tr");
+    cells.forEach(c => { const td = document.createElement(head ? "th" : "td"); td.textContent = c; tr.appendChild(td); });
+    table.appendChild(tr);
+  }
+
+  async function send(file) {
+    lastFile = file;
+    $("status").textContent = "جارٍ التحليل…";
+    const fd = new FormData();
+    fd.append("file", file, file.name || "pasted.png");
+    fd.append("kind", kind);
+    try {
+      const res = await fetch("api/analyze", { method: "POST", body: fd });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.detail || res.statusText);
+      render(r);
+      $("status").textContent = `تم التحليل في ${(r.elapsed_ms / 1000).toFixed(2)} ثانية`;
+    } catch (err) {
+      $("status").textContent = "خطأ: " + err.message;
+    }
+  }
+
+  function render(r) {
+    $("result").classList.remove("hidden");
+    const unsure = !r.is_fake && r.verdict.startsWith("uncertain");
+    const cls = r.is_fake ? "fake" : unsure ? "unsure" : "real";
+    $("verdict").className = "card verdict " + cls;
+    $("vText").textContent = r.is_fake ? "⚠️ مزيّفة / معدّلة بالذكاء الاصطناعي" : unsure ? "❔ غير محسومة" : "✅ تبدو حقيقية";
+    $("vKind").textContent = r.kind_ar;
+    $("vName").textContent = r.filename || "";
+    $("vSize").textContent = r.image_size.join(" × ");
+    $("vPct").textContent = pct(r.prob_fake);
+    $("vBar").style.width = pct(r.prob_fake);
+    $("vThr").style.insetInlineStart = pct(r.threshold);
+    $("vThr").title = "حد القرار " + pct(r.threshold);
+    $("annotated").src = r.annotated_image;
+
+    const ex = $("explain"); ex.replaceChildren();
+    r.explanation.forEach(t => { const li = document.createElement("li"); li.textContent = t; ex.appendChild(li); });
+
+    const mt = $("models"); mt.replaceChildren();
+    row(mt, ["النموذج", "الاحتمال", "الحد", "القرار"], true);
+    Object.entries(r.models).forEach(([n, m]) => row(mt, [n, pct(m.prob_fake), pct(m.threshold), m.is_fake ? "مزيّف" : "حقيقي"]));
+
+    const md = $("meta"); md.replaceChildren();
+    const m = r.metadata;
+    row(md, ["الصيغة", m.format || "—"]);
+    row(md, ["الكاميرا", m.camera || "—"]);
+    row(md, ["البرنامج", m.software || "—"]);
+    row(md, ["EXIF", m.has_exif ? "موجود" : "غير موجود"]);
+    row(md, ["علامات AI", m.markers.length ? m.markers.join("، ") : "لا يوجد"]);
+  }
+})();
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ can be forged. They are reported next to the model score, not fused into it.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 from PIL import ExifTags, Image
@@ -37,11 +38,14 @@ _TAGS = {v: k for k, v in ExifTags.TAGS.items()}
 
 
 def inspect_file(path: str | Path, scan_bytes: int = 512_000) -> dict:
-    path = Path(path)
+    return inspect_bytes(Path(path).read_bytes(), scan_bytes)
+
+
+def inspect_bytes(data: bytes, scan_bytes: int = 512_000) -> dict:
     report: dict = {"format": None, "size": None, "camera": None, "software": None,
                     "has_exif": False, "markers": []}
     try:
-        with Image.open(path) as im:
+        with Image.open(io.BytesIO(data)) as im:
             report["format"], report["size"] = im.format, list(im.size)
             exif = im.getexif()
             report["has_exif"] = len(exif) > 0
@@ -57,7 +61,7 @@ def inspect_file(path: str | Path, scan_bytes: int = 512_000) -> dict:
         report["error"] = str(e)
         return report
 
-    blob = path.read_bytes()[:scan_bytes].lower()
+    blob = data[:scan_bytes].lower()
     for needle, meaning in AI_MARKERS.items():
         if needle.encode() in blob and meaning not in report["markers"]:
             report["markers"].append(meaning)

@@ -114,3 +114,46 @@ def test_train_evaluate_predict(dataset, tmp_path):
     assert res[0]["models"][next(iter(res[0]["models"]))]["n_tiles"] > 1
     assert list((tmp_path / "hm").glob("*.jpg"))
     json.loads((tmp_path / "pred.json").read_text())
+
+
+def test_server_analyze(dataset, tmp_path):
+    import io
+
+    from fastapi.testclient import TestClient
+
+    from aimv.analyze import guess_kind, load_analyzer
+    from aimv.server import create_app
+    from aimv.train import train
+
+    cfg = load_config(ROOT / "configs/debug_cpu.yaml", [
+        f"data.manifest='{dataset / 'manifest.csv'}'", f"train.output_dir='{tmp_path / 'run'}'", "train.epochs=1",
+    ])
+    ckpt = train(cfg)["checkpoint"]
+    import torch
+    analyzer = load_analyzer([ckpt], [ckpt], torch.device("cpu"), max_tiles=16)
+    client = TestClient(create_app(analyzer))
+
+    assert client.get("/").status_code == 200
+    assert client.get("/api/health").json()["status"] == "ok"
+
+    buf = io.BytesIO()
+    make_image(np.random.default_rng(5), True, (500, 380)).save(buf, format="JPEG")
+    for kind in ("auto", "document", "photo"):
+        r = client.post("/api/analyze", files={"file": ("x.jpg", buf.getvalue(), "image/jpeg")}, data={"kind": kind})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert 0 <= body["prob_fake"] <= 1 and body["explanation"] and body["annotated_image"].startswith("data:image/jpeg")
+        assert body["kind"] in ("photo", "document")
+        if kind != "auto":
+            assert body["kind"] == kind
+
+    bad = client.post("/api/analyze", files={"file": ("x.jpg", b"not an image", "image/jpeg")})
+    assert bad.status_code == 400
+
+    paper = Image.new("RGB", (400, 600), (245, 245, 240))
+    from PIL import ImageDraw
+    d = ImageDraw.Draw(paper)
+    for y in range(40, 560, 22):
+        d.text((30, y), "AMOUNT : 1970.000 LYD  15/09/2023", fill=(20, 20, 20))
+    assert guess_kind(paper) == "document"
+    assert guess_kind(make_image(np.random.default_rng(6), False, (300, 300))) == "photo"

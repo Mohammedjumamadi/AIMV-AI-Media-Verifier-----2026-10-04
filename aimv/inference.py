@@ -59,16 +59,19 @@ def tile_boxes(w: int, h: int, size: int, overlap: float = 0.25, max_tiles: int 
     return boxes, xs, ys
 
 
-@torch.no_grad()
-def score_image(det: LoadedDetector, img: Image.Image, tta: bool = True, batch: int = 16) -> dict:
+@torch.inference_mode()
+def score_image(det: LoadedDetector, img: Image.Image, tta: bool = True, batch: int = 16,
+                max_tiles: int = 64) -> dict:
     size = det.cfg.data.crop_size
+    orig_w = img.size[0]
     img = resize_longest(img, det.cfg.data.max_side)
+    scale = orig_w / img.size[0]  # map tile boxes back to the uploaded image
     w, h = img.size
     if w < size or h < size:
         crops, boxes = [random_crop(img, size, train=False)], [(0, 0)]
         xs, ys = [0], [0]
     else:
-        boxes, xs, ys = tile_boxes(w, h, size)
+        boxes, xs, ys = tile_boxes(w, h, size, max_tiles=max_tiles)
         crops = [img.crop((x, y, x + size, y + size)) for x, y in boxes]
     x = torch.stack([to_tensor(c) for c in crops])
     logits = []
@@ -89,9 +92,12 @@ def score_image(det: LoadedDetector, img: Image.Image, tta: bool = True, batch: 
     pos = {(bx, by): (j, i) for j, by in enumerate(ys) for i, bx in enumerate(xs)}
     for (bx, by), p in zip(boxes, tile_probs):
         heat[pos[(bx, by)]] = p
+    tiles = [{"box": [round(bx * scale), round(by * scale), round(min(w, bx + size) * scale),
+                      round(min(h, by + size) * scale)], "prob": float(p)}
+             for (bx, by), p in zip(boxes, tile_probs)]
     return {"prob_fake": prob, "mean_tile_prob": mean, "topk_tile_prob": topk, "n_tiles": len(tile_probs),
             "threshold": det.threshold, "is_fake": prob >= det.threshold, "heatmap": heat,
-            "tile_size": size}
+            "tile_size": size, "tiles": tiles}
 
 
 def verdict(prob: float, threshold: float) -> str:

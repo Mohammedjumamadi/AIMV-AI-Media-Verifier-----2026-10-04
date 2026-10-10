@@ -66,13 +66,18 @@ def write_manifest(path: str | Path, samples: list[Sample]) -> None:
             w.writerow({k: getattr(s, k) for k in MANIFEST_FIELDS})
 
 
-def load_rgb(path: str | Path) -> Image.Image:
+def to_rgb(im: Image.Image) -> Image.Image:
+    """RGB with transparent areas flattened onto white."""
+    if im.mode in ("RGBA", "LA", "P"):
+        im = im.convert("RGBA")
+        bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
+        im = Image.alpha_composite(bg, im)
+    return im.convert("RGB")
+
+
+def load_rgb(path) -> Image.Image:
     with Image.open(path) as im:
-        if im.mode in ("RGBA", "LA", "P"):
-            im = im.convert("RGBA")
-            bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
-            im = Image.alpha_composite(bg, im)
-        return im.convert("RGB")
+        return to_rgb(im)
 
 
 def to_tensor(img: Image.Image) -> torch.Tensor:
