@@ -1,0 +1,15 @@
+# Tiny smoke-test config: runs on CPU in seconds, no downloads.
+data:
+  manifest: data/manifest.csv
+  crop_size: 64
+  num_workers: 0
+model:
+  backbone: resnet18
+  pretrained: false
+  highpass: true
+train:
+  output_dir: runs/debug
+  epochs: 2
+  batch_size: 8
+  amp: false
+  ema_decay: 0.9

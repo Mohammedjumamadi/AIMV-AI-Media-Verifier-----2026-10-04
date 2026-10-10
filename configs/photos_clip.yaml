@@ -1,0 +1,22 @@
+# Semantic detector: CLIP ViT-L/14 features, last 4 blocks fine-tuned.
+# Generalises best to AI generators that were NOT in the training set.
+data:
+  manifest: data/manifest.csv
+  categories: [photo, social, screenshot]
+  crop_size: 224
+  num_workers: 8
+augment:
+  rescale: 0.4
+model:
+  backbone: vit_large_patch14_clip_224.openai
+  highpass: false            # keep CLIP's pretrained input stem intact
+  freeze_backbone: true
+  unfreeze_last_n: 4
+  drop_rate: 0.1
+train:
+  output_dir: runs/photos_clip
+  epochs: 15
+  batch_size: 32
+  lr: 1.0e-3
+  backbone_lr_mult: 0.02
+  weight_decay: 0.01

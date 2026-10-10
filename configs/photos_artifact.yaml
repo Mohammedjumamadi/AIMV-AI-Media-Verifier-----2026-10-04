@@ -1,0 +1,17 @@
+# Low-level artifact detector for photos (people, animals, scenes).
+# Native-resolution crops + SRM residuals: catches generator fingerprints.
+data:
+  manifest: data/manifest.csv
+  categories: [photo, social, screenshot]
+  crop_size: 320
+  num_workers: 8
+model:
+  backbone: convnext_small.fb_in22k_ft_in1k
+  highpass: true
+  drop_path_rate: 0.2
+train:
+  output_dir: runs/photos_artifact
+  epochs: 25
+  batch_size: 48
+  lr: 3.0e-4
+  backbone_lr_mult: 0.1

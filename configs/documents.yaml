@@ -1,0 +1,23 @@
+# Libyan documents: bank receipts (Moamalat, Sadad, LyPay, ...), ID cards,
+# passports, certificates, family books, invoices. Large crops, no horizontal
+# flip (Arabic/Latin text direction matters), tiled inference at prediction.
+data:
+  manifest: data/manifest.csv
+  categories: [receipt, id_card, passport, certificate, family_book, invoice, letter, document]
+  crop_size: 512
+  max_side: 3072
+  num_workers: 8
+augment:
+  hflip: 0.0
+  rescale: 0.15
+  recapture: 0.15            # documents are often photographed off a phone screen
+  corner_mark: 0.25          # Gemini sparkle etc. must not be a shortcut
+model:
+  backbone: tf_efficientnetv2_s.in21k_ft_in1k
+  highpass: true
+train:
+  output_dir: runs/documents
+  epochs: 30
+  batch_size: 24
+  lr: 3.0e-4
+  target_fpr: 0.005          # wrongly calling a genuine receipt fake is costly

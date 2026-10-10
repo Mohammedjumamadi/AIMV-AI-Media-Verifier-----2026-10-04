@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+# Datasets and model weights never go into git (personal data / large files)
+data/
+runs/
+*.pt
+*.pth
+*.safetensors
